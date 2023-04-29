@@ -1,0 +1,117 @@
+import pandas as pd
+import numpy as np
+import ccxt
+import time
+
+# Load the historical data into a pandas DataFrame
+df = pd.read_csv('bcoin_hist.csv')
+df = pd.read_csv('bcoin_hist.csv')
+df['Price'] = df['Price'].str.replace(',', '').astype(float)
+
+# Convert 'Price' column to float
+df['Price'] = df['Price'].astype(float)
+
+# Initialize variables for backtesting
+best_profit = -np.inf
+best_stop_loss = None
+best_take_profit = None
+
+# Grid search over potential stop_loss and take_profit values
+for stop_loss in np.arange(0.01, 0.1, 0.01):  # Adjust ranges as necessary
+    for take_profit in np.arange(0.01, 0.1, 0.01):  # Adjust ranges as necessary
+        # Initialize backtesting variables
+        holding_btc = False
+        last_trade_price = None
+        profit = 0
+
+        # Iterate over rows in the DataFrame
+        for _, row in df.iterrows():
+            current_price = row['Price']
+
+            if holding_btc:
+                # We have BTC, check if we should sell
+                if current_price <= last_trade_price * (1 - stop_loss) or current_price >= last_trade_price * (1 + take_profit):
+                    # Sell BTC
+                    profit += current_price - last_trade_price
+                    holding_btc = False
+                    last_trade_price = None
+
+            else:
+                # We have USDT, check if we should buy
+                # Buy BTC
+                last_trade_price = current_price
+                holding_btc = True
+
+        # Check if this run was more profitable than the best one so far
+        if profit > best_profit:
+            best_profit = profit
+            best_stop_loss = stop_loss
+            best_take_profit = take_profit
+
+# Initialize the ccxt library
+exchange = ccxt.binance({
+    'apiKey': 'a7fa502e19cade6f3ae74ee25251bbbcc3bdcdcee92bc629a9a7208aaa41d8c6',
+    'secret': '8b9af4311d147706294d6b3670ce30edf2c798e495eb5582ebe62da8ed758f37',
+    'enableRateLimit': True,  
+    'options': {
+        'defaultType': 'future', 
+    },
+})
+
+# Point to the Binance Futures Testnet URL
+exchange.set_sandbox_mode(True)
+
+# Set up trading pair and time frame
+symbol = 'BTC/USDT'
+amount = .15
+
+# Initialize some variables
+last_trade_price = None
+holding_btc = False
+
+# Main trading loop
+while True:
+    # Get current price
+    data = exchange.fetch_ticker(symbol)
+    current_price = data['last']
+    print('Current price:', current_price)
+
+    if holding_btc:
+        print('Currently holding BTC')
+        # We have BTC, check if we should sell
+        if current_price <= last_trade_price * (1 - best_stop_loss):
+            print('Price dropped, triggering stop loss')
+        elif current_price >= last_trade_price * (1 + best_take_profit):
+            print('Price increased,triggering take profit')
+        else:
+            print('Price change does not trigger any action')
+
+        if current_price <= last_trade_price * (1 - best_stop_loss) or current_price >= last_trade_price * (1 + best_take_profit):
+            # Sell BTC
+            print('Selling BTC...')
+            exchange.create_market_sell_order(symbol, amount)
+            holding_btc = False
+            last_trade_price = None
+            print("Sold BTC at", current_price)
+
+    else:
+        print('Currently holding USDT')
+        # We have USDT, check if we should buy
+        balance = exchange.fetch_balance()
+        print('Current USDT balance:', balance['free']['USDT'])
+        if balance['free']['USDT'] >= amount * current_price:
+            # Buy BTC
+            print('Buying BTC...')
+            try:
+                exchange.create_market_buy_order(symbol, amount)
+                holding_btc = True
+                last_trade_price = current_price
+                print("Bought BTC at", current_price)
+            except Exception as e:
+                print("Failed to place buy order:", e)
+        else:
+            print('Not enough USDT to buy BTC')
+
+    # Sleep for a while before checking the prices again
+    print('Sleeping for 60 seconds...')
+    time.sleep(60)
