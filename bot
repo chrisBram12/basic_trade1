@@ -50,8 +50,8 @@ for stop_loss in np.arange(0.01, 0.1, 0.01):  # Adjust ranges as necessary
 
 # Initialize the ccxt library
 exchange = ccxt.binance({
-    'apiKey': 'a7fa502e19cade6f3ae74ee25251bbbcc3bdcdcee92bc629a9a7208aaa41d8c6',
-    'secret': '8b9af4311d147706294d6b3670ce30edf2c798e495eb5582ebe62da8ed758f37',
+    'apiKey': '',
+    'secret': '',
     'enableRateLimit': True,  
     'options': {
         'defaultType': 'future', 
